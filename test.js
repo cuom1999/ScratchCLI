@@ -37,7 +37,7 @@ function fileName(file) {
 }
 
 function cleanOutput(str) {
-    str = str.match(/\b(\w+)\b/g);
+    str = str.split(/(\s+)/).filter( function(e) { return e.trim().length > 0; } );
     res = '';
     for (i of str) {
         res += i + '\n';

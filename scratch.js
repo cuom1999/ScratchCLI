@@ -3,6 +3,7 @@
 const process = require('process');
 const readLine = require('readline');
 const fileSystem = require('fs');
+const fetch = require('node-fetch');
 const scratchVM = require('scratch-vm');
 const scratchStorage = require('scratch-storage');
 
@@ -60,30 +61,44 @@ function hideAllSprites() {
     }
 }
 
+function getProjectUrl(asset) {
+    return ['https://projects.scratch.mit.edu/', asset.assetId].join('');
+}
 
-// Define the error log
-process.stdout.write = process.stderr.write 
+function getAssetUrl(asset) {
+    const ASSET_SERVER = 'https://cdn.assets.scratch.mit.edu/';
+    const assetUrlParts = [
+        ASSET_SERVER,
+        'internalapi/asset/',
+        asset.assetId,
+        '.',
+        asset.dataFormat,
+        '/get/'
+    ];
+    return assetUrlParts.join('');
+};
 
+function startVM() {
+    global.fetch = fetch;
+    _vm.setTurboMode(true);
+    _storage.addWebStore([_storage.AssetType.Project], getProjectUrl);
+    _storage.addWebSource([_storage.AssetType.ImageVector, _storage.AssetType.ImageBitmap, _storage.AssetType.Sound], getAssetUrl);
+    _vm.attachStorage(_storage);
+    _vm.start();
+    _vm.runtime.on('SAY', function(p1, p2, message) {
+        process.stdout.write(message + '\n');
+    });
 
-// Start VM
-_vm.attachStorage(_storage);
-_vm.start();
-_vm.setTurboMode(true);
+    _vm.runtime.on('QUESTION', function(message) {
+        if (message != null) {
+            if (lines.length > 0) answer(lines.shift());
+            else waiting = true;
+        }
+    });
+}
 
-_vm.runtime.on('SAY', function(p1, p2, message) {
-    process.stdout.write(message + '\n');
-});
-
-_vm.runtime.on('QUESTION', function(message) {
-    if (message != null) {
-        if (lines.length > 0) answer(lines.shift());
-        else waiting = true;
-    }
-});
-
-
-fileSystem.readFile(argv.file, function(err, data) {
-    _vm.loadProject(data)
+function loadVMProject(source) {
+    _vm.loadProject(source)
     .then(input => {
         hideAllSprites();
         process.stdout.write = out;
@@ -99,4 +114,41 @@ fileSystem.readFile(argv.file, function(err, data) {
 
         process.exit(1);
     })
-});
+}
+
+// Define the error log
+process.stdout.write = process.stderr.write 
+
+startVM();
+
+const urlRegex = new RegExp('scratch.mit.edu\/projects\/([0-9]+)');
+
+if (argv.file.toString().endsWith('sb') 
+    || argv.file.toString().endsWith('sb2') 
+    || argv.file.toString().endsWith('sb3')) {
+    fileSystem.readFile(argv.file, function(err, data) {
+        loadVMProject(data);
+    });
+}
+else {
+    var matchRegex = urlRegex.exec(argv.file);
+    if (matchRegex) {
+        var projectID = matchRegex[1];
+
+         _storage.load(_storage.AssetType.Project, projectID)
+        .then(projectAsset => {
+            loadVMProject(projectAsset.data);
+        })
+        .catch(error => {
+            process.stdout.write = out;
+            process.stdout.write('Failed to fetch file\n');
+
+            process.exit(1);
+        });
+    }
+    else {
+        process.stdout.write = out;
+        process.stdout.write('Invalid input. Must be a sb/sb2/sb3 file or an MIT url.\n');
+        process.exit(1);
+    }
+}
