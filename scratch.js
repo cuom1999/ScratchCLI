@@ -111,7 +111,7 @@ function loadVMProject(source) {
     .catch(err => {
         process.stdout.write = out;
         process.stdout.write('Compiled Errors\n');
-
+        process.stdout.write(err);
         process.exit(1);
     })
 }
@@ -134,7 +134,6 @@ else {
     var matchRegex = urlRegex.exec(argv.file);
     if (matchRegex) {
         var projectID = matchRegex[1];
-
          _storage.load(_storage.AssetType.Project, projectID)
         .then(projectAsset => {
             loadVMProject(projectAsset.data);
